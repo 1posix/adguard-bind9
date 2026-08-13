@@ -1,203 +1,236 @@
-# adguard-bind9 v2
+# adguard-bind9
 
-A small, hardened DNS stack for a Debian Docker host:
+A simple self-hosted DNS stack combining **AdGuard Home** with a private **BIND 9 recursive resolver**.
+
+AdGuard handles filtering and client policies. BIND resolves domains directly through the DNS hierarchy, provides caching, and validates DNSSEC — without requiring a public recursive provider such as Google, Cloudflare or Quad9.
+
+## Architecture
 
 ```text
 LAN / VLAN clients
-       |
-       | TCP+UDP 53
-       v
-+------------------+
-|   AdGuard Home   |  filtering, policies, query log
-|   172.30.0.4     |
-+---------+--------+
-          |
-          | plain DNS, private Docker network
-          v
-+------------------+
-|      BIND 9      |  recursive resolver + cache + DNSSEC validation
-|   172.30.0.3     |
-+---------+--------+
-          |
-          | direct recursive DNS
-          v
-     DNS root / TLD / authoritative servers
+        |
+        | TCP + UDP 53
+        v
++----------------------+ 
+|     AdGuard Home     |
+|      172.30.0.4      |
+|                      |
+| filtering / policies |
++----------+-----------+
+           |
+           | private Docker network
+           v
++----------------------+
+|        BIND 9        |
+|      172.30.0.3      |
+|                      |
+| recursion / cache    |
+| DNSSEC validation    |
++----------+-----------+
+           |
+           v
+ Root -> TLD -> Authoritative DNS
 ```
 
-BIND has **no port published on the Docker host**.  Only AdGuard can reach it.
-AdGuard is the only DNS service exposed to trusted LAN/VLAN clients.
+**BIND is never published on the Docker host.** Only AdGuard can query it directly.
 
-## Main changes compared with v1
+| Component | Role |
+|---|---|
+| **AdGuard Home** | Filtering, client policies, query logs, DNS frontend |
+| **BIND 9** | Recursive resolution, cache, DNSSEC validation |
+| **Docker network** | Private communication between AdGuard and BIND |
 
-- AdGuard Home pinned to a stable release instead of an implicit `latest`.
-- Canonical BIND 9.20 stable track instead of the deprecated `latest` track.
-- No `BIND9_USER=root`; the image's safer default user handling is retained.
-- DNSSEC validation enabled in BIND.
-- BIND recursion/cache restricted to AdGuard and localhost.
-- BIND no longer exposes host port 553.
-- `/etc/bind` is no longer hidden by a broad bind mount.
-- BIND uses its compiled-in root hints; the project ships its own minimal localhost zones, so there is no stale `db.root` to maintain and no dependency on distribution-specific `db.*` files.
-- Removed the unused repository copy of `db.root` and the broken `example.com` zone.
-- AdGuard `conf` and `work` storage are separated.
-- Only plain DNS and the web/setup interfaces are published by default.
-- Docker log rotation, memory guards and PID limits are configured.
-- BIND uses its Canonical/Pebble health check and AdGuard waits for BIND health.
-- Preflight, validation, DNS smoke-test, backup, update and v1 migration scripts.
-- Optional `home.arpa` forward/reverse zone examples.
-- CI validates Compose, BIND configuration and shell syntax.
+## Highlights
 
-## 1. Requirements
+- AdGuard Home DNS filtering
+- Private BIND 9 recursive resolver
+- DNSSEC validation enabled
+- No public recursive DNS upstream required
+- BIND isolated from the host network
+- Restricted recursion/cache access
+- Persistent AdGuard configuration
+- Docker log rotation and resource limits
+- BIND health check and startup ordering
+- Validation, backup, update and migration scripts
+- Optional `home.arpa` local DNS examples
+- GitHub Actions configuration validation
 
-Designed for Debian 13 with Docker Engine and Docker Compose v2.
+## Requirements
 
-Useful host packages:
+- Debian 13
+- Docker Engine
+- Docker Compose v2
+- A stable IP address
+- TCP/UDP port `53` available
+
+Useful tools:
 
 ```bash
 sudo apt update
 sudo apt install -y ca-certificates curl dnsutils
 ```
 
-Do **not** blindly uninstall DHCP packages.  The only networking requirement is
-that the Debian host has a stable IP address and that port 53 is available.
+### Networking step from v1
 
-Check port 53:
+After configuring a fixed IP address, the original v1 setup removed the DHCP client and rebooted:
+
+```bash
+sudo apt remove isc-dhcp-client -y
+sudo reboot
+```
+
+Make sure the server already has its intended static network configuration before running this step.
+
+Check whether port 53 is already in use:
 
 ```bash
 sudo ss -lntup | grep ':53'
 ```
 
-If something already owns port 53, identify and deliberately reconfigure it
-before starting this stack.
+## Quick start
 
-## 2. Configure the deployment
+Clone the repository:
+
+```bash
+git clone https://github.com/1posix/adguard-bind9.git
+cd adguard-bind9
+```
+
+Create your local configuration:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-At minimum, set:
+Set at least:
 
 ```dotenv
 DNS_BIND_IP=192.168.1.10
 WEB_BIND_IP=192.168.1.10
 ```
 
-`DNS_BIND_IP` is the address that clients will use as their DNS server.
-`WEB_BIND_IP` may be the same address or a dedicated management address.
+Replace `192.168.1.10` with the IP address of your Debian host.
 
-The Docker-only resolver addresses are intentionally fixed:
+The internal Docker addresses are fixed by default:
 
 ```text
 BIND     172.30.0.3
 AdGuard  172.30.0.4
 ```
 
-If `172.30.0.0/24` overlaps another local/Docker network, change the subnet and
-both static addresses in `compose.yaml`, then also update the AdGuard address in
-`config/bind9/named.conf.options`.
+> If `172.30.0.0/24` conflicts with an existing network, adapt the subnet and static addresses in `compose.yaml` and the AdGuard ACL in `config/bind9/named.conf.options`.
 
-## 3. Preflight
+Run the preflight checks:
 
 ```bash
 ./scripts/preflight.sh
 ```
 
-Fix any reported hard failure before continuing.  Warnings about IPs or port 53
-should be investigated rather than ignored.
-
-## 4. First start
+Start the stack:
 
 ```bash
 docker compose pull
 docker compose up -d
-```
-
-Inspect:
-
-```bash
 docker compose ps
-docker compose logs --tail=100 bind9
-docker compose logs --tail=100 adguardhome
 ```
 
-The BIND container is expected to become healthy before AdGuard is started.
+BIND should become `healthy` before AdGuard starts.
 
-## 5. Fresh AdGuard setup
+## Configure AdGuard Home
 
-Open:
+For a fresh installation, open:
 
 ```text
-http://WEB_BIND_IP:3000/
+http://SERVER_IP:3000/
 ```
 
-During the wizard:
+Complete the setup wizard and create your administrator account.
 
-1. Keep the DNS server on port `53`.
-2. Configure the production web interface on container port `80`.
-3. Create a strong administrator account.
-4. Finish the wizard, then use `http://WEB_BIND_IP/` (or the host-side
-   `ADGUARD_WEB_PORT` chosen in `.env`).
+Then open the normal interface:
 
-In **Settings -> DNS settings** set:
+```text
+http://SERVER_IP/
+```
+
+Go to **Settings -> DNS settings** and configure:
 
 ```text
 Upstream DNS servers:
 172.30.0.3:53
+
+Fallback DNS servers:
+(empty)
+
+Bootstrap DNS servers:
+(empty)
 ```
 
-Recommended for this architecture:
+The expected resolution path is:
 
 ```text
-Fallback DNS servers:   empty
-Bootstrap DNS servers:  empty for this numeric upstream
+Client -> AdGuard -> BIND -> Root/TLD/Authoritative DNS
 ```
 
-The goal is to ensure normal DNS resolution follows only:
+## Validate the stack
 
-```text
-client -> AdGuard -> BIND -> authoritative DNS hierarchy
-```
-
-Do not add Google/Cloudflare/Quad9 as a fallback if your goal is to keep BIND as
-your recursive resolver.
-
-## 6. Validate end-to-end
+Run the end-to-end test:
 
 ```bash
 ./scripts/test-dns.sh
 ```
 
-The script verifies normal DNS resolution through AdGuard and performs a DNSSEC
-negative test using `dnssec-failed.org`.  A `SERVFAIL` on that deliberately
-broken DNSSEC domain is expected.
+It verifies normal DNS resolution through AdGuard and performs a DNSSEC negative test with `dnssec-failed.org`.
 
-You can also test manually:
+A `SERVFAIL` response for that deliberately broken DNSSEC domain is expected.
+
+Manual tests:
 
 ```bash
 dig @192.168.1.10 example.org A
 dig @192.168.1.10 dnssec-failed.org A
 ```
 
-Replace `192.168.1.10` with `DNS_BIND_IP`.
+Replace `192.168.1.10` with your `DNS_BIND_IP`.
 
-## 7. Firewall policy
+<details>
+<summary><strong>Migrating from v1</strong></summary>
 
-At the network/firewall layer, the intended policy is:
+<br>
 
-```text
-trusted LAN/VLANs -> DNS_BIND_IP TCP/UDP 53    ALLOW
-admin network     -> WEB_BIND_IP web port      ALLOW
-WAN/untrusted     -> DNS and admin UI          DENY
+Keep a backup of the old project before starting.
+
+Stop the old stack:
+
+```bash
+cd /path/to/old/adguard-bind9
+docker compose down
 ```
 
-BIND itself has no published host port, so it should never be directly
-reachable from LAN or WAN.
+From the v2 directory:
 
-If you route several VLANs through VyOS, allow TCP **and** UDP 53 from only the
-VLANs that should use this resolver.
+```bash
+./scripts/migrate-v1.sh /path/to/old/adguard-bind9
+```
 
-## 8. Operational commands
+The migration helper keeps the existing AdGuard configuration and runtime data while replacing the old BIND configuration with the v2 resolver setup.
+
+Then:
+
+```bash
+./scripts/preflight.sh
+docker compose up -d
+./scripts/test-dns.sh
+```
+
+Keep the old project until DNS resolution, filtering and the AdGuard interface have been verified.
+
+</details>
+
+<details>
+<summary><strong>Common operations</strong></summary>
+
+<br>
 
 Status:
 
@@ -212,112 +245,73 @@ docker compose logs -f --tail=100 adguardhome
 docker compose logs -f --tail=100 bind9
 ```
 
+Validate configuration:
+
+```bash
+./scripts/validate.sh
+```
+
 Restart:
 
 ```bash
 docker compose restart
 ```
 
-Validate configuration before a restart:
+Stop / start:
 
 ```bash
-./scripts/validate.sh
+docker compose down
+docker compose up -d
 ```
 
-## 9. Backups
+</details>
 
-Configuration-only backup, no DNS interruption:
+<details>
+<summary><strong>Backups and updates</strong></summary>
+
+<br>
+
+Configuration backup:
 
 ```bash
 ./scripts/backup.sh config
 ```
 
-Full AdGuard backup (briefly stops only AdGuard for consistency):
+Full AdGuard backup:
 
 ```bash
 ./scripts/backup.sh full
 ```
 
-Archives are written under `backups/` with permissions `0600`.
+Backups are stored in `backups/`.
 
-The BIND recursive cache is stored in a Docker named volume and is intentionally
-not treated as important backup data.  It can be rebuilt from DNS sources.
-
-## 10. Updating
-
-Image choices live in `.env`:
+Image versions are configured in `.env`, for example:
 
 ```dotenv
 ADGUARD_IMAGE=adguard/adguardhome:v0.107.78
 BIND_IMAGE=ubuntu/bind9:9.20-26.04_stable
 ```
 
-For a new AdGuard stable release, edit `ADGUARD_IMAGE` deliberately.  The BIND
-track follows Canonical's supported 9.20/26.04 stable channel.
-
-Then:
+After changing an image version:
 
 ```bash
 ./scripts/update.sh
 ./scripts/test-dns.sh
 ```
 
-The update helper makes a configuration backup, runs preflight checks, pulls the
-declared images, validates BIND, and recreates the stack.
+Prefer deliberate version updates over unpinned `latest` images.
 
-## 11. Migrating from v1
+</details>
 
-**First make a copy/backup of the old project.**  Do not reuse the same directory
-in-place for the first migration attempt.
+## Local DNS
 
-Stop the old v1 stack so it releases host port 53:
-
-```bash
-cd /path/to/old/adguard-bind9-main
-docker compose down
-```
-
-From the v2 directory:
-
-```bash
-./scripts/migrate-v1.sh /path/to/old/adguard-bind9-main
-```
-
-The migration script understands the v1 layout where the same host directory was
-mounted as both AdGuard `conf` and `work`.  It copies:
-
-```text
-old data/adguard/AdGuardHome.yaml -> new data/adguard/conf/AdGuardHome.yaml
-old data/adguard/data/            -> new data/adguard/work/data/
-```
-
-It intentionally does **not** copy the old BIND configuration because the point
-of v2 is to replace that configuration with the corrected resolver setup.
-
-Then edit `.env`, run preflight, start v2 and test it.  Keep the old project until
-you have confirmed DNS, filtering and the admin UI all work.
-
-Because v1 normally configured the AdGuard web interface on internal port 80,
-the v2 production mapping retains container port 80 and is migration-friendly.
-
-## 12. Optional internal DNS with `home.arpa`
-
-RFC 8375 reserves `home.arpa` for local home-network names.  Examples are in:
+Optional forward and reverse BIND zone examples are available in:
 
 ```text
 examples/bind9/home.arpa/
 ```
 
-To use them:
-
-1. Adapt hostnames/IPs and reverse subnet.
-2. Copy the zone databases into `config/bind9/zones/`.
-3. Add the zone declarations to `config/bind9/named.conf.local`.
-4. Increment the SOA serial every time a zone changes.
-5. Run `./scripts/validate.sh`.
-6. Restart BIND: `docker compose restart bind9`.
-
-Example names could become:
+They can be adapted to provide local names such as:
 
 ```text
 router.home.arpa
@@ -326,67 +320,47 @@ idrac.home.arpa
 plex.home.arpa
 ```
 
-## 13. Why there is no AdGuard container healthcheck
+Private production zones should stay out of the public repository.
 
-The upstream AdGuard project removed its Docker healthcheck because generic
-health checks produced edge cases, excess I/O and problematic restart loops in
-some deployments.  This v2 therefore uses:
+## Security
 
-- Canonical's native Pebble health for BIND, so startup order is reliable;
-- an explicit end-to-end `scripts/test-dns.sh` for the complete DNS path;
-- Docker's normal `restart: unless-stopped` policy for process failures.
+- BIND is not published directly on the Docker host.
+- BIND recursion/cache access is restricted to AdGuard and localhost.
+- Do not expose the AdGuard administration interface to the Internet.
+- Only allow DNS access from trusted LAN/VLAN networks.
+- Keep `.env`, AdGuard runtime data, backups and private DNS zones out of Git.
+- Keep AdGuard Home and BIND updated after reviewing stable releases.
 
-This avoids pretending that a generic HTTP probe proves the DNS/filtering path is
-healthy.
-
-## 14. Security notes
-
-- Never publish BIND's port 53 directly unless you have a specific reason.
-- Do not expose the AdGuard admin UI to the Internet.
-- Do not configure an unrestricted WAN-facing recursive resolver.
-- Keep AdGuard and BIND images updated after reviewing stable release notes.
-- Back up `data/adguard/conf/AdGuardHome.yaml`; it contains your operational
-  configuration and administrator credentials (hashed, but still sensitive).
-- Keep `.env`, runtime data, local zone files and backups out of public Git repos.
-- The Compose logging driver is `local` with rotation to prevent unbounded
-  `json-file` growth.
-
-## Project layout
+## Project structure
 
 ```text
 .
 ├── compose.yaml
 ├── .env.example
 ├── .gitignore
-├── config/
-│   └── bind9/
-│       ├── named.conf
-│       ├── named.conf.options
-│       ├── named.conf.local
-│       ├── named.conf.local-zones
-│       └── zones/
-│           └── system/
-├── data/
-│   └── adguard/
-│       ├── conf/
-│       └── work/
-├── examples/
-│   └── bind9/home.arpa/
-├── scripts/
-│   ├── preflight.sh
-│   ├── validate.sh
-│   ├── test-dns.sh
-│   ├── backup.sh
-│   ├── update.sh
-│   └── migrate-v1.sh
-└── .github/workflows/validate.yml
+├── VERSION
+├── CHANGELOG.md
+├── config/bind9/       # BIND configuration
+├── data/adguard/       # Persistent AdGuard data
+├── examples/bind9/     # Optional local DNS examples
+├── scripts/            # Validation / backup / update tools
+└── .github/workflows/  # CI validation
 ```
 
 ## References
 
-- AdGuard Home Docker: https://github.com/AdguardTeam/AdGuardHome/wiki/Docker
-- AdGuard Home releases: https://github.com/AdguardTeam/AdGuardHome/releases
-- Canonical BIND image: https://hub.docker.com/r/ubuntu/bind9
-- BIND 9 ARM/reference docs: https://bind9.readthedocs.io/
-- Docker Compose startup order: https://docs.docker.com/compose/how-tos/startup-order/
-- Docker local logging driver: https://docs.docker.com/engine/logging/drivers/local/
+- [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)
+- [AdGuard Home Docker documentation](https://github.com/AdguardTeam/AdGuardHome/wiki/Docker)
+- [AdGuard Home releases](https://github.com/AdguardTeam/AdGuardHome/releases)
+- [BIND 9 documentation](https://bind9.readthedocs.io/)
+- [Canonical BIND 9 Docker image](https://hub.docker.com/r/ubuntu/bind9)
+- [Docker Compose documentation](https://docs.docker.com/compose/)
+- [RFC 8375 - `home.arpa`](https://datatracker.ietf.org/doc/html/rfc8375)
+
+## Upstream
+
+This repository is based on the original project:
+
+- [s4dic/adguard-bind9](https://github.com/s4dic/adguard-bind9)
+
+Version 2 keeps the original goal — running AdGuard Home and BIND together — while redesigning the stack for stronger isolation, validation, DNSSEC and maintainability.
