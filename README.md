@@ -57,8 +57,7 @@ LAN / VLAN clients
 
 ## Requirements
 
-- Debian 13
-- Docker Engine
+- Linux Distro
 - Docker Compose v2
 - A stable IP address
 - TCP/UDP port `53` available
@@ -305,19 +304,47 @@ Prefer deliberate version updates over unpinned `latest` images.
 
 ## Local DNS
 
-Optional forward and reverse BIND zone examples are available in:
+BIND can also provide optional local DNS using the RFC 8375 reserved domain `home.arpa`.
+
+A complete generic example is available in:
 
 ```text
 examples/bind9/home.arpa/
+├── db.home.arpa.example
+├── db.192.168.1.example
+└── named.conf.local.example
 ```
 
-They can be adapted to provide local names such as:
+The example contains both:
+
+- a **forward zone**: hostname → IP address
+- a **reverse zone**: IP address → hostname
+
+Generic records can be adapted to any home, lab or small-office network:
 
 ```text
-router.home.arpa
-esxi.home.arpa
-idrac.home.arpa
-plex.home.arpa
+gateway.home.arpa
+dns.home.arpa
+server.home.arpa
+nas.home.arpa
+printer.home.arpa
+client.home.arpa
+```
+
+For example:
+
+```text
+server.home.arpa  -> 192.168.1.10
+192.168.1.10      -> server.home.arpa
+```
+
+Copy and adapt the example files to your own subnet, hostnames and addresses, then declare the zones in `config/bind9/named.conf.local`.
+
+Validate the configuration before restarting BIND:
+
+```bash
+./scripts/validate.sh
+docker compose restart bind9
 ```
 
 Private production zones should stay out of the public repository.

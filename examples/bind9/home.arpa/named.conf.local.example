@@ -1,5 +1,12 @@
-// Example internal DNS zone (RFC 8375 home.arpa).
-// Adapt addresses and names before enabling it.
+// Generic home.arpa example.
+//
+// Forward zone:
+//   hostname.home.arpa -> IPv4 address
+//
+// Reverse zone:
+//   IPv4 address -> hostname.home.arpa
+//
+// Adapt the subnet, filenames and records before enabling these zones.
 
 zone "home.arpa" {
     type primary;

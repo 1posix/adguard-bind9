@@ -1,4 +1,5 @@
 $TTL 3600
+
 @   IN  SOA ns1.home.arpa. hostmaster.home.arpa. (
         2026081301 ; serial YYYYMMDDNN
         3600       ; refresh
@@ -9,8 +10,16 @@ $TTL 3600
 
     IN  NS  ns1.home.arpa.
 
-ns1         IN  A   192.168.1.10
-router      IN  A   192.168.1.1
-adguard     IN  A   192.168.1.10
-esxi        IN  A   192.168.1.20
-idrac       IN  A   192.168.1.21
+; ---------------------------------------------------------------------------
+; Generic example records
+; Replace these names and addresses with your own network.
+; ---------------------------------------------------------------------------
+
+ns1         IN  A   192.168.1.2
+
+gateway     IN  A   192.168.1.1
+dns         IN  A   192.168.1.2
+server      IN  A   192.168.1.10
+nas         IN  A   192.168.1.20
+printer     IN  A   192.168.1.30
+client      IN  A   192.168.1.100

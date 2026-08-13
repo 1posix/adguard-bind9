@@ -1,15 +1,23 @@
 $TTL 3600
+
 @   IN  SOA ns1.home.arpa. hostmaster.home.arpa. (
         2026081301 ; serial YYYYMMDDNN
-        3600
-        900
-        604800
-        300
+        3600       ; refresh
+        900        ; retry
+        604800     ; expire
+        300        ; negative cache TTL
 )
 
     IN  NS  ns1.home.arpa.
 
-1   IN  PTR router.home.arpa.
-10  IN  PTR adguard.home.arpa.
-20  IN  PTR esxi.home.arpa.
-21  IN  PTR idrac.home.arpa.
+; ---------------------------------------------------------------------------
+; Reverse DNS for the example 192.168.1.0/24 network.
+; The number on the left is the last octet of the IPv4 address.
+; ---------------------------------------------------------------------------
+
+1       IN  PTR gateway.home.arpa.
+2       IN  PTR dns.home.arpa.
+10      IN  PTR server.home.arpa.
+20      IN  PTR nas.home.arpa.
+30      IN  PTR printer.home.arpa.
+100     IN  PTR client.home.arpa.
