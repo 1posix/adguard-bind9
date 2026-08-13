@@ -1,0 +1,86 @@
+name: adguard-bind9
+
+services:
+  bind9:
+    image: ${BIND_IMAGE:-ubuntu/bind9:9.20-26.04_stable}
+    container_name: bind9
+    hostname: bind9
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      - ./config/bind9/named.conf:/etc/bind/named.conf:ro
+      - ./config/bind9/named.conf.options:/etc/bind/named.conf.options:ro
+      - ./config/bind9/named.conf.local:/etc/bind/named.conf.local:ro
+      - ./config/bind9/named.conf.local-zones:/etc/bind/named.conf.local-zones:ro
+      - ./config/bind9/zones:/etc/bind/zones:ro
+      - bind_cache:/var/cache/bind
+    networks:
+      dns_network:
+        ipv4_address: 172.30.0.3
+    healthcheck:
+      test: ["CMD", "pebble", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: ${BIND_MEM_LIMIT:-512m}
+    mem_reservation: ${BIND_MEM_RESERVATION:-128m}
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  adguardhome:
+    image: ${ADGUARD_IMAGE:-adguard/adguardhome:v0.107.78}
+    container_name: adguardhome
+    hostname: adguardhome
+    restart: unless-stopped
+    depends_on:
+      bind9:
+        condition: service_healthy
+        restart: true
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      - ./data/adguard/work:/opt/adguardhome/work
+      - ./data/adguard/conf:/opt/adguardhome/conf
+    ports:
+      - "${DNS_BIND_IP:?Set DNS_BIND_IP in .env}:53:53/tcp"
+      - "${DNS_BIND_IP:?Set DNS_BIND_IP in .env}:53:53/udp"
+      - "${WEB_BIND_IP:?Set WEB_BIND_IP in .env}:${ADGUARD_WEB_PORT:-80}:80/tcp"
+      - "${WEB_BIND_IP:?Set WEB_BIND_IP in .env}:${ADGUARD_SETUP_PORT:-3000}:3000/tcp"
+    dns:
+      - 172.30.0.3
+    networks:
+      dns_network:
+        ipv4_address: 172.30.0.4
+    mem_limit: ${ADGUARD_MEM_LIMIT:-1024m}
+    mem_reservation: ${ADGUARD_MEM_RESERVATION:-128m}
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+networks:
+  dns_network:
+    name: adguard-bind9_dns
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+
+volumes:
+  bind_cache:
+    name: adguard-bind9_bind-cache

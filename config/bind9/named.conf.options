@@ -1,0 +1,43 @@
+acl "adguard_clients" {
+    127.0.0.1;
+    172.30.0.4;
+};
+
+options {
+    directory "/var/cache/bind";
+
+    // Recursive resolver: only AdGuard (plus localhost) may use it.
+    recursion yes;
+    allow-query { adguard_clients; };
+    allow-recursion { adguard_clients; };
+    allow-query-cache { adguard_clients; };
+
+    // This resolver is not intended to serve zone transfers.
+    allow-transfer { none; };
+
+    // Validate signed DNS data against the root trust anchor managed by BIND.
+    dnssec-validation auto;
+
+    // Reduce the amount of information sent upstream during recursion.
+    qname-minimization relaxed;
+
+    // Smaller answers reduce unnecessary traffic and amplification potential.
+    minimal-responses yes;
+    minimal-any yes;
+
+    // Keep useful answers available during temporary authoritative outages.
+    stale-cache-enable yes;
+    stale-answer-enable yes;
+
+    // Keep the recursive cache bounded inside the container memory limit.
+    max-cache-size 256m;
+
+    // Avoid exposing implementation details through CHAOS queries.
+    version none;
+    hostname none;
+    server-id none;
+
+    // BIND has no published host port.  It listens only inside its container.
+    listen-on { 127.0.0.1; 172.30.0.3; };
+    listen-on-v6 { none; };
+};

@@ -1,0 +1,12 @@
+// Local authoritative zones belong here.
+//
+// The resolver works without any local zone.  A ready-to-copy home.arpa
+// example is available under examples/bind9/home.arpa/.
+//
+// Example after copying zone files into config/bind9/zones/:
+//
+// zone "home.arpa" {
+//     type primary;
+//     file "/etc/bind/zones/db.home.arpa";
+//     allow-update { none; };
+// };

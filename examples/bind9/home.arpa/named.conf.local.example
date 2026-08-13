@@ -1,0 +1,14 @@
+// Example internal DNS zone (RFC 8375 home.arpa).
+// Adapt addresses and names before enabling it.
+
+zone "home.arpa" {
+    type primary;
+    file "/etc/bind/zones/db.home.arpa";
+    allow-update { none; };
+};
+
+zone "1.168.192.in-addr.arpa" {
+    type primary;
+    file "/etc/bind/zones/db.192.168.1";
+    allow-update { none; };
+};

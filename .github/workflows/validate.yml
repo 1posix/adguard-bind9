@@ -1,0 +1,21 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare CI environment
+        run: |
+          cp .env.example .env
+          sed -i 's/^DNS_BIND_IP=.*/DNS_BIND_IP=127.0.0.1/' .env
+          sed -i 's/^WEB_BIND_IP=.*/WEB_BIND_IP=127.0.0.1/' .env
+
+      - name: Validate stack
+        run: ./scripts/validate.sh

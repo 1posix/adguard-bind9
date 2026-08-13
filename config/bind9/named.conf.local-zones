@@ -1,0 +1,26 @@
+// Minimal local special-use zones.  These files are shipped by this project,
+// so the configuration does not depend on distribution-specific db.* files.
+
+zone "localhost" {
+    type primary;
+    file "/etc/bind/zones/system/db.local";
+    allow-update { none; };
+};
+
+zone "127.in-addr.arpa" {
+    type primary;
+    file "/etc/bind/zones/system/db.127";
+    allow-update { none; };
+};
+
+zone "0.in-addr.arpa" {
+    type primary;
+    file "/etc/bind/zones/system/db.0";
+    allow-update { none; };
+};
+
+zone "255.in-addr.arpa" {
+    type primary;
+    file "/etc/bind/zones/system/db.255";
+    allow-update { none; };
+};

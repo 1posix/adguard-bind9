@@ -1,0 +1,23 @@
+# Local deployment settings
+.env
+
+# AdGuard persistent runtime/configuration (may contain credentials and logs)
+data/adguard/conf/*
+!data/adguard/conf/.gitkeep
+data/adguard/work/*
+!data/adguard/work/.gitkeep
+
+# Local BIND zone databases can contain infrastructure names/IPs.
+config/bind9/zones/*
+!config/bind9/zones/.gitkeep
+!config/bind9/zones/system/
+!config/bind9/zones/system/**
+
+# Backups
+backups/*
+!backups/.gitkeep
+
+# Editor/OS files
+.DS_Store
+*.swp
+*~

@@ -1,0 +1,16 @@
+$TTL 3600
+@   IN  SOA ns1.home.arpa. hostmaster.home.arpa. (
+        2026081301 ; serial YYYYMMDDNN
+        3600       ; refresh
+        900        ; retry
+        604800     ; expire
+        300        ; negative cache TTL
+)
+
+    IN  NS  ns1.home.arpa.
+
+ns1         IN  A   192.168.1.10
+router      IN  A   192.168.1.1
+adguard     IN  A   192.168.1.10
+esxi        IN  A   192.168.1.20
+idrac       IN  A   192.168.1.21
